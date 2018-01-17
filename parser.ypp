@@ -206,7 +206,7 @@ int main()
 		/*if (accepted == 1)
 			printf("Accepted");*/
 		//head_scope->val->printAllInScope(); //printing symbol table
-		assign_list->printEntry(); //printing ASTs
+		//assign_list->printEntry(); //printing ASTs
 		//top_ast_node->printEntry(); //printing ASTs
 		//gen3AC(assign_list);
 		//printLinkedList(head_code); //printing 3AC
