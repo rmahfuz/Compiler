@@ -1,0 +1,29 @@
+#!/bin/bash
+
+#Parameter validation--------------------------------------------------------------------------
+#if (( $# != 2 ))
+#then
+#	echo "Usage: runme.bash <input file to scanner> <pathname to scanner output>"
+#	exit 1
+#fi
+
+#if [[ ! -e $1 ]]
+#then
+#	echo "$1 does not exist"
+#	exit 2
+#fi
+
+#if [[ ! -e a.out ]]
+#then
+#	echo "Please run 'make compiler' first"
+#	exit 3
+#fi
+
+#Actual running of scanner---------------------------------------------------------------------
+#flex scanner.lex #makes a file lex.yy.c
+#gcc lex.yy.c -lfl #compiling lex.yy.c
+a.out < $1 > $2 #running a.out with input as first parameter, sending output to second parameter
+#a.out < $1 > $2 #running a.out with input as first parameter, sending output to second parameter
+#a.out < $1  #running a.out with input as first parameter, sending output to second parameter
+
+exit 0

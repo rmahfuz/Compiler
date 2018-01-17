@@ -1,0 +1,111 @@
+ (list of assignments)
+    := (STORE)
+        tret (INT)
+        factorial (FUNC_CALL)
+            - (SUB)
+                a (INT)
+                1 (INTLITERAL)
+    := (STORE)
+        ret (INT)
+        * (MUL)
+            tret (INT)
+            a (INT)
+    input  (WRITE)
+    num  (READ)
+    := (STORE)
+        result (INT)
+        1 (INTLITERAL)
+    := (STORE)
+        result (INT)
+        factorial (FUNC_CALL)
+            num (INT)
+    := (STORE)
+        result (INT)
+        0 (INTLITERAL)
+    result eol  (WRITE)
+str input "Please enter an integer number: "
+str eol "\n"
+push 
+push r0
+push r1
+push r2
+push r3
+jsr main
+sys halt
+label factorial
+link 2
+move 1 r0
+cmpi $6 r0
+jne label1
+move 1 r1
+move r1 $7
+unlnk
+ret
+jmp label2
+label label1
+push 
+move 1 r2
+move $6 r3
+subi  r2 r3
+push r3
+push r0
+push r1
+push r2
+push r3
+jsr factorial
+pop r3
+pop r2
+pop r1
+pop r0
+pop 
+pop r4
+move r4 $-2
+move $6 r5
+muli  $-2 r5
+move r5 $-1
+label label2
+move $-1 r6
+move r6 $7
+unlnk
+ret
+label main
+link 2
+sys writes input
+sys readi $-1
+move 1 r7
+cmpi $-1 r7
+jne label3
+move 1 r8
+move r8 $-2
+jmp label4
+label label3
+move 1 r9
+cmpi $-1 r9
+jle label5
+push 
+push $-1
+push r0
+push r1
+push r2
+push r3
+jsr factorial
+pop r3
+pop r2
+pop r1
+pop r0
+pop 
+pop r10
+move r10 $-2
+jmp label6
+label label5
+move 0 r11
+move r11 $-2
+label label6
+label label4
+sys writei $-2
+sys writes eol
+move 0 r12
+move r12 $6
+unlnk
+ret
+end

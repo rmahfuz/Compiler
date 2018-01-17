@@ -1,0 +1,215 @@
+%{
+#include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+#include<string>
+#include"ast_node.cpp"
+//define YY_DECL extern "C" int yylex(void)
+void yyerror(char* s);  //added by me
+int yylex();            //added by me
+bool declaration = false;
+char* cur_var_type = "INVALID";
+extern int linenum;
+int block_cnt;
+int accepted = 1;
+bool verbose = false;
+ASTNode* top_ast_node;
+%}
+%union
+{
+	struct Entry* entry;
+	struct ASTNode* ast_node;
+	struct ASTNodeAddr* ast_node_addr;
+	char* str_val;
+}	
+
+%token <str_val> PROGRAM 
+%token _BEGIN 
+%token END 
+%token FUNCTION
+%token READ 
+%token WRITE
+%token IF 
+%token ELSE
+%token FI 
+%token FOR 
+%token ROF 
+%token RETURN 
+%token INT 
+%token VOID 
+%token STRING 
+%token FLOAT 
+%token PLUS_OP 
+%token MINUS_OP 
+%token COLONEQUAL_OP 
+%token STAR_OP 
+%token DIVIDE_OP 
+%token EQUAL_OP 
+%token NOTEQUAL_OP 
+%token LESSTHAN_OP
+%token  GREATERTHAN_OP 
+%token OPENPARAN_OP 
+%token CLOSEPARAN_OP 
+%token SEMICOLON_OP 
+%token COMMA_OP 
+%token LESSTHANEQUAL_OP 
+%token GREATERTHANEQUAL_OP 
+%token <str_val> IDENTIFIER 
+%token <str_val> INTLITERAL 
+%token <str_val> FLOATLITERAL 
+%token <str_val> STRINGLITERAL
+
+%type <str_val> program id str var_type any_type
+%type <ast_node_addr> id_list id_tail var_decl string_decl expr_list expr_list_tail param_decl_list param_decl_tail
+%type <ast_node> assign_stmt assign_expr read_stmt write_stmt return_stmt base_stmt if_stmt else_part for_stmt stmt stmt_list expr expr_prefix factor factor_prefix postfix_expr call_expr primary addop mulop cond compop decl pgm_body func_declarations func_decl func_body param_decl init_stmt incr_stmt
+
+%start program
+
+%%
+
+
+program           : PROGRAM id _BEGIN  {
+					/*SymTable* */global_table = new SymTable("GLOBAL"); 
+					head_scope = new ScopeNode(global_table);
+					cur_scope = head_scope;}
+         			pgm_body END;
+id                : IDENTIFIER {$$ = $1;};
+pgm_body          : decl {initialize();}func_declarations 
+					{ $$ = new ASTNode("n/a", "PGM_BODY"); 
+					$$->addChild($1); 
+					if ($3 == NULL) {$$ = new ASTNode("n/a", "func_declarations is empty");}
+					else{$$->addChild($3);} 
+					top_ast_node = $$; 
+					$$->generate_code();};
+decl              : string_decl decl { if ($2 == NULL) {$$ = new ASTNode("n/a", "DECL"); $$->children = new ASTNodeAddr($1);} else {$$ = $2; ASTNodeAddr* tmp = $$->children; $$->children = new ASTNodeAddr($1); $$->children->next = tmp;}}
+					| var_decl decl  { if ($2 == NULL) {$$ = new ASTNode("n/a", "DECL"); $$->children = new ASTNodeAddr($1);} else {$$ = $2; ASTNodeAddr* tmp = $$->children; $$->children = new ASTNodeAddr($1); $$->children->next = tmp;}}
+					|{$$ = NULL;}  ;
+
+string_decl       : STRING id COLONEQUAL_OP str  SEMICOLON_OP {$$ = new ASTNodeAddr(cur_scope->val->addEntry($2, "STRING", $4));};
+str               : STRINGLITERAL {$$ = $1;};
+
+var_decl          : var_type {declaration = true;} id_list SEMICOLON_OP{declaration = false; $$ = $3;};
+var_type          : FLOAT {$$ = "FLOAT"; cur_var_type = "FLOAT";}
+					| INT {$$ = "INT";   cur_var_type = "INT";};
+any_type          : var_type {$$ = $1;}| VOID {$$ = "VOID";};
+id_list           : id {if (declaration == true) cur_scope->val->addEntry($1, cur_var_type);} id_tail 
+					{ASTNode* new_node = new ASTNode($1, head_scope->val->findType($1)); $$ = new ASTNodeAddr(new_node);
+					$$->next = $3;};
+id_tail           : COMMA_OP id {if (declaration == true) cur_scope->val->addEntry($2, cur_var_type);}  id_tail 
+					{ASTNode* new_node = new ASTNode($2, head_scope->val->findType($2)); $$ = new ASTNodeAddr(new_node); 
+				     $$->next = $4;}
+					| {$$ = NULL;} ;
+
+param_decl_list   : param_decl param_decl_tail          {$$ = new ASTNodeAddr($1); $$->next = $2;} | { $$ = NULL;};
+
+param_decl        : var_type id 
+					{cur_scope->val->addEntry($2, $1, "", true); /*specifying that it is an arg*/
+                    $$ = new ASTNode($1, $2); };
+param_decl_tail   : COMMA_OP param_decl param_decl_tail {$$ = new ASTNodeAddr($2); $$->next = $3;} | {$$ = NULL;} ;
+
+
+
+
+func_declarations : func_decl func_declarations { 
+					if ($2 == NULL) {$$ = new ASTNode("n/a", "FUNC_DECLARATIONS"); $$->addChild($1);}
+					else {$$ = $2; ASTNodeAddr* tmp = $$->children; $$->children = new ASTNodeAddr($1); $$->children->next = tmp;}} 
+					|{$$ = NULL;}  ;
+func_decl         : FUNCTION any_type id {
+					SymTable* new_table = new SymTable($3, 0, $2);cur_scope->next_scope = new ScopeNode(new_table, cur_scope); cur_scope=cur_scope->next_scope;
+					head_scope->val->addChild(cur_scope->val); }
+					OPENPARAN_OP param_decl_list CLOSEPARAN_OP _BEGIN func_body END 
+					{
+					cur_scope = cur_scope->prev_scope; delete cur_scope->next_scope;
+					$$ = new ASTNode("n/a", "FUNC_DECL"); $$->addChild(new ASTNode($2, "ret type of func"));/*type*/ 
+					$$->addChild((ASTNode*)($3)); /*id*/ 
+					ASTNode* params = new ASTNode("n/a", "PARAM_DECL_LIST"); params -> children = $6; $$->addChild(params); /*param_decl_list*/ 
+					$$->addChild($9); /*func_body*/ }
+
+func_body         : { }decl stmt_list {  $$ = new ASTNode("n/a", "FUNC_BODY"); $$->addChild($2); $$->addChild($3);};
+
+stmt_list         : stmt stmt_list 
+					{ if ($2 == NULL) {$$ = new ASTNode("n/a", "STMT_LIST"); $$->children = new ASTNodeAddr($1);}
+					else {ASTNodeAddr* tmp = $2->children; $2->children = new ASTNodeAddr($1); $2->children->next = tmp; $$ = $2;}}
+					| {$$ = NULL;} ;
+stmt              : base_stmt {$$ = $1; /*gen3AC_stmt($$);*/} | if_stmt {$$ = $1; /*gen3AC_stmt($$);*/} | for_stmt {$$ = $1;};
+base_stmt         : assign_stmt {$$ = $1;} | read_stmt {$$ = $1;}| write_stmt {$$ = $1;}| return_stmt {$$ = $1;};
+
+assign_stmt       : assign_expr SEMICOLON_OP {$$ = $1;};
+assign_expr       : id COLONEQUAL_OP expr {
+					$$ = new ASTNode(":=", "STORE"); $$->addChild(new ASTNode($1, head_scope->val->findType($1))); $$->addChild($3); assign_list->addChild($$); };
+read_stmt         : READ OPENPARAN_OP id_list CLOSEPARAN_OP SEMICOLON_OP {
+					$$ = new ASTNode((char*)$3, "READ"); assign_list->addChild($$);}
+write_stmt        : WRITE OPENPARAN_OP id_list CLOSEPARAN_OP SEMICOLON_OP {
+					$$ = new ASTNode((char*)$3, "WRITE"); assign_list->addChild($$);};
+return_stmt       : RETURN expr SEMICOLON_OP { $$ = new ASTNode("see child for value", "RET_STMT"); $$->addChild($2);};
+
+expr              : expr_prefix factor {if ($1 == NULL) {$$ = $2;} else {$1->addChild($2); $$ = $1;}};
+expr_prefix       : expr_prefix factor addop {if ($1 == NULL) {$3->addChild($2); $$ = $3;} else {$1->addChild($2); $3->addChild($1); $$ = $3; }} | {$$ = NULL;} ;
+factor            : factor_prefix postfix_expr {if ($1 == NULL) {$$ = $2;} else {$1->addChild($2); $$ = $1; if(verbose) printf("factor: %s, factor_prefix = %s, postfix_expr = %s  ", $$->value, $1->value, $2->value); }};
+factor_prefix     : factor_prefix postfix_expr mulop {if ($1 == NULL) {$3->addChild($2); $$ = $3;} else {$1->addChild($2); $3->addChild($1); $$ = $3;}}| {$$ = NULL;} ;
+postfix_expr      : primary {$$ = $1;}| call_expr {$$ = $1;};
+call_expr         : id OPENPARAN_OP expr_list CLOSEPARAN_OP {$$ = new ASTNode($1, "FUNC_CALL"); $$->children = $3;}; 
+primary           : OPENPARAN_OP expr CLOSEPARAN_OP {$$ = $2;}| id {$$ = new ASTNode($1, head_scope->val->findType($1));} | INTLITERAL {$$ = new ASTNode($1, "INTLITERAL");  } | FLOATLITERAL {$$ = new ASTNode($1, "FLOATLITERAL");} ;
+
+
+expr_list         : expr expr_list_tail          {$$ = new ASTNodeAddr($1); $$->next = $2;}| {$$ = NULL;} ;
+expr_list_tail    : COMMA_OP expr expr_list_tail {$$ = new ASTNodeAddr($2); $$->next = $3;}| {$$ = NULL;} ;
+
+addop             : PLUS_OP {$$ = new ASTNode("+", "ADD");}| MINUS_OP {$$ = new ASTNode("-", "SUB");};
+mulop             : STAR_OP {$$ = new ASTNode("*", "MUL");}| DIVIDE_OP {$$ = new ASTNode("/", "DIV");};
+
+if_stmt           : IF {block_cnt++; char* block_name = "BLOCK"; SymTable* new_table = new SymTable(block_name, block_cnt);
+                        cur_scope->next_scope = new ScopeNode(new_table, cur_scope); cur_scope=cur_scope->next_scope;
+                        head_scope->val->addChild(cur_scope->val);}
+
+					 OPENPARAN_OP cond CLOSEPARAN_OP decl 
+					stmt_list {cur_scope = cur_scope->prev_scope; delete cur_scope->next_scope;} 
+					else_part FI
+					{$$ = new ASTNode("n/a", "IF"); $$->addChild($4); if ($6 != NULL)$$->addChild($6); else $$->addChild(new ASTNode("n/a", "decl is empty")); $$->addChild($7); if ($9 != NULL) $$->addChild($9); else $$->addChild(new ASTNode("n/a", "else_part is NULL"));};
+else_part         : ELSE {block_cnt++; char* block_name = "BLOCK"; SymTable* new_table = new SymTable(block_name, block_cnt);
+                        cur_scope->next_scope = new ScopeNode(new_table, cur_scope); cur_scope=cur_scope->next_scope;
+                        head_scope->val->addChild(cur_scope->val);}
+					 decl stmt_list{cur_scope = cur_scope->prev_scope; delete cur_scope->next_scope;
+					$$ = new ASTNode("n/a", "ELSE_PART"); if($3 != NULL) $$->addChild($3); else $$->addChild(new ASTNode("n/a", "decl is empty")); $$->addChild($4); } | {$$ = NULL;} ;
+cond              : expr compop expr {$$ = $2; $$->addChild($1); $$->addChild($3); };
+compop            : LESSTHAN_OP {$$ = new ASTNode("<", "LT");}
+					| GREATERTHAN_OP {$$ = new ASTNode(">", "GT");}
+					| EQUAL_OP {$$ = new ASTNode("=", "EQ");}
+					| NOTEQUAL_OP {$$ = new ASTNode("!=", "NE");}
+					| LESSTHANEQUAL_OP {$$ = new ASTNode("<=", "LE");}
+					| GREATERTHANEQUAL_OP {$$ = new ASTNode(">=", "GE");};
+init_stmt         : assign_expr {$$ = $1;}| {$$ = NULL;}  ;
+incr_stmt         : assign_expr {$$ = $1;}| {$$ = NULL;} ;
+
+for_stmt          : FOR {block_cnt++; char* block_name = "BLOCK"; SymTable* new_table = new SymTable(block_name, block_cnt);
+						cur_scope->next_scope = new ScopeNode(new_table, cur_scope); cur_scope=cur_scope->next_scope; 
+						head_scope->val->addChild(cur_scope->val);}
+					 OPENPARAN_OP init_stmt SEMICOLON_OP cond SEMICOLON_OP incr_stmt CLOSEPARAN_OP decl stmt_list 
+					 ROF  {cur_scope = cur_scope->prev_scope; delete cur_scope->next_scope; 
+					$$ = new ASTNode("n/a", "FOR_STMT"); 
+					if ($4 == NULL) {$$->addChild(new ASTNode("", "init_stmt is empty"));} else {$$->addChild($4); }/*init_stmt*/ 
+					$$->addChild($6); /*cond*/ 
+					if ($8 == NULL) {$$->addChild(new ASTNode("", "incr_stmt is empty"));} else {$$->addChild($8); }/*incr_stmt*/ 
+					$$->addChild($10); /*decl*/ 
+					$$->addChild($11); /*stmt_list*/} ;
+%%
+
+void yyerror(char* s)
+{
+        //printf("Not accepted, line_num = %d\n", linenum);
+        //printf("Not accepted");
+		accepted = 0;
+}
+int main()
+{
+        yyparse();
+		/*if (accepted == 1)
+			printf("Accepted");*/
+		//head_scope->val->printAllInScope(); //printing symbol table
+		assign_list->printEntry(); //printing ASTs
+		//top_ast_node->printEntry(); //printing ASTs
+		//gen3AC(assign_list);
+		//printLinkedList(head_code); //printing 3AC
+		gen_asm(head_code);
+		printLinkedList(head_asm);  //printing assembly
+}
